@@ -1,0 +1,72 @@
+# .NET Build Output
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.user
+*.suo
+*.cache
+*.tmp
+*.log
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# NuGet Packages
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# SQLite Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Entity Framework
+Migrations/
+
+# Publish Output
+[Pp]ublish/
+publish/
+*.pubxml
+*.publishproj
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Test Results
+TestResults/
+*.trx
+*.coverage
+
+# JetBrains
+.idea/
+*.sln.iml
+
+# OS Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
