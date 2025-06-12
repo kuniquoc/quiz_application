@@ -4,10 +4,10 @@ namespace quiz_application.Domain.Entities
     {
         public int AttemptId { get; set; }
         public int QuizId { get; set; } // Foreign Key        
-        public DateTime ClientStartTime { get; set; } // Quiz start time (UTC), sent from client
-        public DateTime ClientEndTime { get; set; }   // Quiz end time (UTC), sent from client
-        public int Score { get; set; }               // Total number of correct answers
-        public bool IsPassed { get; set; }            // Pass/Fail result        
+        public DateTime StartTime { get; set; } // Quiz start time (UTC), recorded on server
+        public DateTime EndTime { get; set; }   // Quiz end time (UTC), recorded on server
+        public int Score { get; set; }          // Total number of correct answers
+        public bool IsPassed { get; set; }      // Pass/Fail result        
 
         // Navigation properties
         public Quiz Quiz { get; set; } = null!; // null-forgiving operator
