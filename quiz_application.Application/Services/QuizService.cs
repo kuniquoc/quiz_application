@@ -33,65 +33,31 @@ namespace quiz_application.Application.Services
             return quizzes;
         }
         // API 1: Start Quiz and Get question list
-        public async Task<QuizStartResponseDto> StartQuizAsync(QuizStartRequestDto request)
+        public async Task<QuizStartResponseDto> StartQuizAsync(int quizId)
         {
-            // Validate request object
-            if (request == null)
-            {
-                throw new BadRequestException("Request cannot be null.");
-            }
-
             // Validate QuizId
-            if (request.QuizId <= 0)
+            if (quizId <= 0)
             {
                 throw new BadRequestException("QuizId must be a positive integer.");
-            }
-            // Validate client start time
-            if (request.ClientStartTimeTicks <= 0)
-            {
-                throw new BadRequestException("Invalid client start time. ClientStartTimeTicks must be a positive value.");
-            }
-
-            // Convert ClientStartTimeTicks to DateTime and validate
-            DateTime clientStartTime;
-            try
-            {
-                clientStartTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientStartTimeTicks).UtcDateTime;
-
-                // Check if the start time is too far in the past or future
-                if (clientStartTime < DateTime.UtcNow.AddDays(-1))
-                {
-                    throw new BadRequestException("Start time cannot be more than 1 day in the past.");
-                }
-                if (clientStartTime > DateTime.UtcNow.AddMinutes(5)) // Allow a small buffer for clock differences
-                {
-                    throw new BadRequestException("Start time cannot be in the future.");
-                }
-            }
-            catch (Exception ex) when (!(ex is BadRequestException))
-            {
-                throw new BadRequestException($"Invalid client start time format: {ex.Message}");
             }
 
             var quiz = await _dbContext.Quizzes
                 .Include(q => q.Questions)
                     .ThenInclude(ques => ques.Options)
-                .FirstOrDefaultAsync(q => q.QuizId == request.QuizId);
+                .FirstOrDefaultAsync(q => q.QuizId == quizId);
 
             if (quiz == null)
             {
-                throw new NotFoundException($"Quiz with ID {request.QuizId} not found.");
+                throw new NotFoundException($"Quiz with ID {quizId} not found.");
             }
             if (quiz.Questions == null || !quiz.Questions.Any())
             {
                 throw new BadRequestException("Quiz has no questions.");
-            }
-
-            // Create a new record for the user's quiz attempt
+            }            // Create a new record for the user's quiz attempt
             var newAttempt = new UserQuizAttempt
             {
-                QuizId = request.QuizId,
-                ClientStartTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientStartTimeTicks).UtcDateTime
+                QuizId = quizId,
+                StartTime = DateTime.UtcNow // Use server time instead of client time
             };
 
             _dbContext.UserQuizAttempts.Add(newAttempt);
@@ -235,7 +201,7 @@ namespace quiz_application.Application.Services
         }
 
         // API 3: Finish Quiz and Get detailed results
-        public async Task<QuizResultDto> FinishQuizAndGetResultsAsync(int attemptId, QuizFinishRequestDto request)
+        public async Task<QuizResultDto> FinishQuizAndGetResultsAsync(int attemptId)
         {
             // Validate attemptId parameter
             if (attemptId <= 0)
@@ -243,33 +209,6 @@ namespace quiz_application.Application.Services
                 throw new BadRequestException("AttemptId must be a positive integer.");
             }
 
-            // Validate request object
-            if (request == null)
-            {
-                throw new BadRequestException("Request cannot be null.");
-            }
-            // Validate ClientEndTimeTicks
-            if (request.ClientEndTimeTicks <= 0)
-            {
-                throw new BadRequestException("Invalid client end time. ClientEndTimeTicks must be a positive value.");
-            }
-
-            // Convert ClientEndTimeTicks to DateTime and validate
-            DateTime clientEndTime;
-            try
-            {
-                clientEndTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientEndTimeTicks).UtcDateTime;
-
-                // Check if the end time is in the future
-                if (clientEndTime > DateTime.UtcNow.AddMinutes(5)) // Allow a small buffer for clock differences
-                {
-                    throw new BadRequestException("End time cannot be in the future.");
-                }
-            }
-            catch (Exception ex) when (!(ex is BadRequestException))
-            {
-                throw new BadRequestException($"Invalid client end time format: {ex.Message}");
-            }
             var attempt = await _dbContext.UserQuizAttempts
                 .Include(a => a.Quiz) // Load Quiz to get PassPercentage and TimeLimitSeconds
                 .Include(a => a.UserAnswers) // Load user's answers
@@ -279,17 +218,11 @@ namespace quiz_application.Application.Services
 
             if (attempt == null) throw new NotFoundException($"Quiz attempt with ID {attemptId} not found.");
 
-            // Update end time from client (already validated above)
-            attempt.ClientEndTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientEndTimeTicks).UtcDateTime;
-
-            // Validate that end time is after start time
-            if (attempt.ClientEndTime <= attempt.ClientStartTime)
-            {
-                throw new BadRequestException("End time must be after start time.");
-            }
+            // Set end time to current server time
+            attempt.EndTime = DateTime.UtcNow;
 
             // Calculate total time spent on the quiz
-            var totalTimeTaken = attempt.ClientEndTime - attempt.ClientStartTime;
+            var totalTimeTaken = attempt.EndTime - attempt.StartTime;
             // Count correct/incorrect answers
             var correctAnswersCount = attempt.UserAnswers.Count(ua => ua.IsCorrect);
             var totalQuestionsInQuiz = await _dbContext.Questions.CountAsync(q => q.QuizId == attempt.QuizId);

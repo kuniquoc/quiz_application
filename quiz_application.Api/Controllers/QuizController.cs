@@ -30,18 +30,11 @@ namespace quiz_application.Api.Controllers
         /// Start a new Quiz and get the list of questions.
         /// </summary>
         /// <param name="quizId">ID of the Quiz to start.</param>
-        /// <param name="request">Contains the Quiz start time from client.</param>
         /// <returns>Information about the Quiz and the sorted/randomized list of questions.</returns>
         [HttpPost("{quizId}/start")]
-        public async Task<ActionResult<QuizStartResponseDto>> StartQuiz(int quizId, [FromBody] QuizStartRequestDto request)
+        public async Task<ActionResult<QuizStartResponseDto>> StartQuiz(int quizId)
         {
-            // Check route parameter matches body
-            if (quizId != request.QuizId)
-            {
-                throw new BadRequestException("QuizId in route and request body must match.");
-            }
-
-            var response = await _quizService.StartQuizAsync(request);
+            var response = await _quizService.StartQuizAsync(quizId);
             return Ok(response);
         }
         /// <summary>
@@ -59,10 +52,9 @@ namespace quiz_application.Api.Controllers
         /// Finish Quiz and get detailed results.
         /// </summary>
         /// <param name="attemptId">ID of the attempt to finish.</param>
-        /// <param name="request">Contains Quiz end time from client.</param>
         /// <returns>Quiz overview results and list of questions for review.</returns>
         [HttpPost("{attemptId}/finish")]
-        public async Task<ActionResult<QuizResultDto>> FinishQuiz(int attemptId, [FromBody] QuizFinishRequestDto request)
+        public async Task<ActionResult<QuizResultDto>> FinishQuiz(int attemptId)
         {
             // Validate attemptId from route
             if (attemptId <= 0)
@@ -70,7 +62,7 @@ namespace quiz_application.Api.Controllers
                 throw new BadRequestException("AttemptId must be a positive integer.");
             }
 
-            var result = await _quizService.FinishQuizAndGetResultsAsync(attemptId, request);
+            var result = await _quizService.FinishQuizAndGetResultsAsync(attemptId);
             return Ok(result);
         }
     }
