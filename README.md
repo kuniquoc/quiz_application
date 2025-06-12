@@ -105,12 +105,8 @@ Run the tests with:
 dotnet test
 ```
 
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
 ## 👤 Contact
 
-Created with ❤️ by [Your Name]
+Created with by Quoc
 
-[GitHub](https://github.com/yourusername) | [LinkedIn](https://linkedin.com/in/yourprofile)
+[GitHub](https://github.com/kuniquoc)
