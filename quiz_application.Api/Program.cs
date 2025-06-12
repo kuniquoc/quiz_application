@@ -25,11 +25,8 @@ builder.Services.AddScoped<IQuizService, QuizService>();
 var app = builder.Build();
 
 // --- 3. Configure HTTP Request Pipeline (Middleware) ---
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 
 // Global error handling middleware
 app.UseMiddleware<ErrorHandlingMiddleware>();
