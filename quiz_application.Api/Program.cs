@@ -1,31 +1,30 @@
 using Microsoft.EntityFrameworkCore;
-using quiz_application.Infrastructure.Data; // Namespace của DbContext
-using quiz_application.Application.Services; // Namespace của Services
-// using quiz_application.Domain.Entities; // Chỉ để SeedData (cần để SeedData.Initialize)
-// using Microsoft.Extensions.Logging; // Thêm using này cho ILogger
+using quiz_application.Infrastructure.Data;
+using quiz_application.Application.Services;
+using quiz_application.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- 0. Cấu hình cổng mặc định ---
+// --- 0. Configure default ports ---
 builder.WebHost.UseUrls("http://localhost:5000", "https://localhost:5001");
 
-// --- 1. Đăng ký Services vào Dependency Injection container ---
+// --- 1. Register Services into Dependency Injection container ---
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Cấu hình DbContext cho Entity Framework Core
-// Sử dụng SQLite (khuyến nghị cho bài test này vì đơn giản):
+// Configure DbContext for Entity Framework Core
+// Use SQLite (recommended for this test because it's simple):
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Đăng ký QuizService: AddScoped nghĩa là một instance mới được tạo cho mỗi HTTP request.
+// Register QuizService: AddScoped means a new instance is created for each HTTP request.
 builder.Services.AddScoped<IQuizService, QuizService>();
 
-// --- 2. Xây dựng ứng dụng ---
+// --- 2. Build the application ---
 var app = builder.Build();
 
-// --- 3. Cấu hình HTTP Request Pipeline (Middleware) ---
+// --- 3. Configure HTTP Request Pipeline (Middleware) ---
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -33,33 +32,59 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    // Chỉ sử dụng HTTPS redirection trong production
+    // Only use HTTPS redirection in production
     app.UseHttpsRedirection();
 }
+
+// Global error handling middleware
+app.UseMiddleware<ErrorHandlingMiddleware>();
 
 // app.UseAuthorization();
 app.MapControllers();
 
-// --- 4. Tùy chọn: Seed Data và áp dụng Migrations khi khởi động ---
+// --- 4. Database Recreation and Seed Data on startup ---
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    var configuration = services.GetRequiredService<IConfiguration>();
+
     try
     {
-        var context = services.GetRequiredService<ApplicationDbContext>();
-        // Áp dụng tất cả các migrations đang chờ xử lý vào database
-        context.Database.Migrate();
+        var context = services.GetRequiredService<ApplicationDbContext>();        // Check RecreateOnStartup configuration (default is false if not present)
+        bool recreateOnStartup = configuration.GetValue<bool>("DatabaseSettings:RecreateOnStartup", false);
 
-        // Khởi tạo dữ liệu mẫu nếu database trống
-        SeedData.Initialize(services); // Gọi phương thức seed data của bạn
+        if (recreateOnStartup)
+        {
+            logger.LogInformation("RecreateOnStartup is enabled: Deleting existing database..."); context.Database.EnsureDeleted(); // Delete current database
+
+            logger.LogInformation("Creating new database from current model...");
+            context.Database.EnsureCreated(); // Create new database from current model
+
+            logger.LogInformation("Seeding fresh data...");
+            SeedData.Initialize(services); // Initialize sample data
+
+            logger.LogInformation("Database recreation and seeding completed successfully.");
+        }
+        else
+        {            // Normal mode: Apply migrations and seed data if needed
+            logger.LogInformation("Normal mode: Applying pending migrations...");
+            context.Database.Migrate();
+
+            // Seed data if database is empty (with old logic)
+            if (!context.Quizzes.Any())
+            {
+                logger.LogInformation("Database is empty, seeding initial data...");
+                SeedData.Initialize(services);
+            }
+        }
     }
     catch (Exception ex)
     {
-        // Log lỗi nếu có vấn đề khi seed database
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred during database migration or seeding.");
+        logger.LogError(ex, "An error occurred during database setup or seeding.");
+        throw; // Re-throw to prevent application startup if there's a database error
     }
 }
 
-// --- 5. Chạy ứng dụng ---
+// --- 5. Run the application ---
 app.Run();
