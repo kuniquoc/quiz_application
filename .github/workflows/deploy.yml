@@ -59,9 +59,9 @@ jobs:
           script: |
             set -e
             cd ~/quiz_application
-            docker-compose down || echo "No existing containers"
+            docker compose down || echo "No existing containers"
             docker pull ${{ secrets.DOCKER_USERNAME }}/quiz_application:latest
-            docker-compose --env-file .env.docker-compose up -d
+            docker compose --env-file .env.docker-compose up -d
 
             # Create data directory with correct permissions if it doesn't exist
             if [ ! -d "data" ]; then
