@@ -6,7 +6,7 @@ using quiz_application.Api.Middleware;
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 0. Configure default ports ---
-builder.WebHost.UseUrls("http://localhost:5000", "https://localhost:5001");
+builder.WebHost.UseUrls("http://localhost:5000");
 
 // --- 1. Register Services into Dependency Injection container ---
 builder.Services.AddControllers();
@@ -29,11 +29,6 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-}
-else
-{
-    // Only use HTTPS redirection in production
-    app.UseHttpsRedirection();
 }
 
 // Global error handling middleware
