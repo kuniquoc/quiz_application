@@ -31,7 +31,8 @@ The application follows Clean Architecture principles with four main layers:
 - **Infrastructure**: Contains data access implementations, migrations, and seed data
 - **API**: Contains controllers, middleware, and configuration
 
-### Key Components:
+### Key Components
+
 - **Entity Framework Core**: For data access and ORM
 - **SQLite Database**: For data storage
 - **REST API**: For frontend communication
@@ -47,30 +48,33 @@ The application follows Clean Architecture principles with four main layers:
 ### Running Locally
 
 1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/quiz_application.git
+
+   ```bash
+   git clone https://github.com/kuniquoc/quiz_application.git
    cd quiz_application
    ```
 
 2. Build and run the application:
-   ```
+
+   ```bash
    dotnet build
    cd quiz_application.Api
    dotnet run
    ```
 
 3. Access the API:
-   - API: http://localhost:5000/api/quiz
-   - Swagger UI: http://localhost:5000/swagger
+   - API: [http://localhost:5000/api/quiz](http://localhost:5000/api/quiz)
+   - Swagger UI: [http://localhost:5000/swagger](http://localhost:5000/swagger)
 
 ### Docker Deployment
 
 1. Build and run with Docker Compose:
-   ```
+
+   ```bash
    docker-compose up -d
    ```
 
-2. Access the API at: http://localhost:5000/api/quiz
+2. Access the API at: [http://localhost:5000/api/quiz](http://localhost:5000/api/quiz)
 
 ## 📊 API Endpoints
 
@@ -79,12 +83,12 @@ The application follows Clean Architecture principles with four main layers:
 | GET    | `/api/quiz` | Get all available quizzes |
 | POST   | `/api/quiz/{quizId}/start` | Start a new quiz |
 | POST   | `/api/quiz/submit-answer` | Submit an answer for a question |
-| GET    | `/api/quiz/{attemptId}/result` | Get quiz result |
-| GET    | `/api/quiz/{attemptId}/review` | Review quiz answers |
+| POST   | `/api/quiz/{attemptId}/finish` | Finish quiz and get detailed results |
 
 ## 📋 Data Models
 
-### Main Entities:
+### Main Entities
+
 - **Quiz**: Defines a quiz with questions and settings
 - **Question**: Represents a question with multiple options
 - **Option**: Represents an answer choice for a question
@@ -94,6 +98,7 @@ The application follows Clean Architecture principles with four main layers:
 ## 🔧 Configuration
 
 The application uses appsettings.json for configuration:
+
 - Database connection strings
 - Application settings
 - Logging options
@@ -101,12 +106,13 @@ The application uses appsettings.json for configuration:
 ## 🧪 Testing
 
 Run the tests with:
-```
+
+```bash
 dotnet test
 ```
 
 ## 👤 Contact
 
-Created with by Quoc
+Created by Quoc
 
 [GitHub](https://github.com/kuniquoc)
