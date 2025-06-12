@@ -4,8 +4,8 @@ namespace quiz_application.Application.DTOs
     {
         public int QuestionId { get; set; }
         public string QuestionText { get; set; } = null!;
-        public string? YourAnswerText { get; set; } // Câu trả lời của người dùng
-        public string? CorrectAnswerText { get; set; } // Đáp án đúng
-        public bool WasCorrect { get; set; }        // True nếu người dùng trả lời đúng
+        public string? YourAnswerText { get; set; } // User's answer
+        public string? CorrectAnswerText { get; set; } // Correct answer
+        public bool WasCorrect { get; set; }        // True if the user answered correctly
     }
 }
