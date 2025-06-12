@@ -236,7 +236,17 @@ namespace quiz_application.Application.Services
             bool isTimePassed = true; // Default is pass if there's no time limit
             if (attempt.Quiz.TimeLimitSeconds.HasValue)
             {
-                isTimePassed = totalTimeTaken.TotalSeconds <= attempt.Quiz.TimeLimitSeconds.Value;
+                var timeDifference = totalTimeTaken.TotalSeconds - attempt.Quiz.TimeLimitSeconds.Value;
+                // If time taken exceeds the limit, mark as failed
+                // Buffer the time difference to check if it exceeds 1 second (to avoid issues with rounding or small delays)
+                if (timeDifference > 1)
+                {
+                    isTimePassed = false; // Failed due to time limit
+                }
+                else
+                {
+                    isTimePassed = true; // Passed within time limit
+                }
             }
             // Update final results in the Attempt record
             attempt.Score = correctAnswersCount;
