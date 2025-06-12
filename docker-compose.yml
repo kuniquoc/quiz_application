@@ -1,0 +1,19 @@
+version: "3.8"
+services:
+  quiz-api:
+    image: kuniquoc/quiz_application:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    volumes:
+      - quiz-data:/app/data
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Data Source=/app/data/quiz_application.db
+
+volumes:
+  quiz-data:
