@@ -1,12 +1,9 @@
 using quiz_application.Application.DTOs;
 using quiz_application.Domain.Entities;
 using quiz_application.Domain.Enums;
-using quiz_application.Infrastructure.Data; // Để truy cập DbContext
+using quiz_application.Infrastructure.Data; // To access DbContext
+using quiz_application.Application.Exceptions;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace quiz_application.Application.Services
 {
@@ -18,12 +15,11 @@ namespace quiz_application.Application.Services
         {
             _dbContext = dbContext;
         }
-
-        // API 0: Lấy danh sách tất cả Quiz
+        // API 0: Get all quizzes
         public async Task<List<QuizSummaryDto>> GetAllQuizzesAsync()
         {
             var quizzes = await _dbContext.Quizzes
-                .Include(q => q.Questions) // Bao gồm Questions để đếm số câu hỏi
+                .Include(q => q.Questions) // Include Questions to count the number of questions
                 .Select(q => new QuizSummaryDto
                 {
                     QuizId = q.QuizId,
@@ -34,13 +30,49 @@ namespace quiz_application.Application.Services
                     TotalQuestions = q.Questions.Count()
                 })
                 .ToListAsync();
-
             return quizzes;
         }
-
-        // API 1: Bắt đầu Quiz và Lấy danh sách câu hỏi
+        // API 1: Start Quiz and Get question list
         public async Task<QuizStartResponseDto> StartQuizAsync(QuizStartRequestDto request)
         {
+            // Validate request object
+            if (request == null)
+            {
+                throw new BadRequestException("Request cannot be null.");
+            }
+
+            // Validate QuizId
+            if (request.QuizId <= 0)
+            {
+                throw new BadRequestException("QuizId must be a positive integer.");
+            }
+            // Validate client start time
+            if (request.ClientStartTimeTicks <= 0)
+            {
+                throw new BadRequestException("Invalid client start time. ClientStartTimeTicks must be a positive value.");
+            }
+
+            // Convert ClientStartTimeTicks to DateTime and validate
+            DateTime clientStartTime;
+            try
+            {
+                clientStartTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientStartTimeTicks).UtcDateTime;
+
+                // Check if the start time is too far in the past or future
+                if (clientStartTime < DateTime.UtcNow.AddDays(-1))
+                {
+                    throw new BadRequestException("Start time cannot be more than 1 day in the past.");
+                }
+                if (clientStartTime > DateTime.UtcNow.AddMinutes(5)) // Allow a small buffer for clock differences
+                {
+                    throw new BadRequestException("Start time cannot be in the future.");
+                }
+            }
+            catch (Exception ex) when (!(ex is BadRequestException))
+            {
+                throw new BadRequestException($"Invalid client start time format: {ex.Message}");
+            }
+
             var quiz = await _dbContext.Quizzes
                 .Include(q => q.Questions)
                     .ThenInclude(ques => ques.Options)
@@ -48,33 +80,36 @@ namespace quiz_application.Application.Services
 
             if (quiz == null)
             {
-                throw new Exception("Quiz not found."); // Ném Exception để Controller bắt và trả về BadRequest
+                throw new NotFoundException($"Quiz with ID {request.QuizId} not found.");
+            }
+            if (quiz.Questions == null || !quiz.Questions.Any())
+            {
+                throw new BadRequestException("Quiz has no questions.");
             }
 
-            // Tạo một bản ghi mới cho lần làm bài của người dùng
+            // Create a new record for the user's quiz attempt
             var newAttempt = new UserQuizAttempt
             {
                 QuizId = request.QuizId,
-                ClientStartTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientStartTimeTicks).UtcDateTime,
-                // ClientEndTime, Score, IsPassed sẽ được cập nhật sau
+                ClientStartTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientStartTimeTicks).UtcDateTime
             };
+
             _dbContext.UserQuizAttempts.Add(newAttempt);
-            await _dbContext.SaveChangesAsync(); // Lưu để lấy AttemptId
+            await _dbContext.SaveChangesAsync(); // Save to get AttemptId
 
-            // --- Logic điều chỉnh thứ tự câu hỏi ---
-            // Lấy tất cả câu hỏi vào bộ nhớ để sắp xếp ngẫu nhiên (OrderBy(Guid.NewGuid()) không hoạt động trực tiếp trên DB)
+            // --- Logic for adjusting question order ---
+            // Load all questions into memory to sort randomly (OrderBy(Guid.NewGuid()) doesn't work directly on DB)
             var questions = quiz.Questions.ToList();
-
             if (quiz.QuestionOrderType == QuizQuestionOrderType.Random)
             {
-                questions = questions.OrderBy(q => Guid.NewGuid()).ToList(); // Random trong bộ nhớ
+                questions = questions.OrderBy(q => Guid.NewGuid()).ToList(); // Random in memory
             }
-            else // QuizQuestionOrderType.Sequential (mặc định)
+            else // QuizQuestionOrderType.Sequential (default)
             {
                 questions = questions.OrderBy(q => q.OrderInQuiz).ToList();
             }
 
-            // Map các câu hỏi và lựa chọn sang DTOs
+            // Map questions and options to DTOs
             var questionsDto = questions
                 .Select(q => new QuestionDto
                 {
@@ -97,47 +132,89 @@ namespace quiz_application.Application.Services
                 Questions = questionsDto
             };
         }
-
-        // API 2: Gửi câu trả lời và lấy phản hồi
+        // API 2: Submit answer and get feedback
         public async Task<AnswerFeedbackDto> SubmitAnswerAsync(SubmitAnswerRequestDto request)
         {
-            // Kiểm tra tính hợp lệ của Quiz Attempt
-            var attempt = await _dbContext.UserQuizAttempts.FirstOrDefaultAsync(a => a.AttemptId == request.AttemptId);
-            if (attempt == null) throw new Exception("Invalid Quiz Attempt.");
+            // Validate request object
+            if (request == null)
+            {
+                throw new BadRequestException("Request cannot be null.");
+            }
 
-            // Lấy câu hỏi và các lựa chọn của nó để xác thực đáp án
+            // Validate AttemptId
+            if (request.AttemptId <= 0)
+            {
+                throw new BadRequestException("AttemptId must be a positive integer.");
+            }
+
+            // Validate QuestionId
+            if (request.QuestionId <= 0)
+            {
+                throw new BadRequestException("QuestionId must be a positive integer.");
+            }
+
+            // SelectedOptionId can be null (user skipped question), so no need to validate that
+
+            // Check validity of Quiz Attempt
+            var attempt = await _dbContext.UserQuizAttempts
+                .FirstOrDefaultAsync(a => a.AttemptId == request.AttemptId);
+
+            if (attempt == null)
+            {
+                throw new NotFoundException($"Quiz attempt with ID {request.AttemptId} not found.");
+            }
+
+            // Get the question and its options to validate the answer
             var question = await _dbContext.Questions
                 .Include(q => q.Options)
                 .FirstOrDefaultAsync(q => q.QuestionId == request.QuestionId);
 
-            if (question == null) throw new Exception("Question not found.");
+            if (question == null)
+            {
+                throw new NotFoundException($"Question with ID {request.QuestionId} not found.");
+            }
 
-            // Xử lý trường hợp người dùng không chọn option (SelectedOptionId là null)
+            // Verify the question belongs to the quiz in this attempt
+            if (question.QuizId != attempt.QuizId)
+            {
+                throw new BadRequestException($"Question ID {request.QuestionId} does not belong to the quiz in attempt ID {request.AttemptId}.");
+            }
+
+            // Handle case where user does not select option (SelectedOptionId is null)
             Option? selectedOption = null;
             if (request.SelectedOptionId.HasValue)
             {
                 selectedOption = question.Options.FirstOrDefault(o => o.OptionId == request.SelectedOptionId.Value);
-                if (selectedOption == null) throw new Exception("Selected option not found for this question.");
-            }
 
+                // Validate if the option exists and belongs to this question
+                if (selectedOption == null)
+                {
+                    throw new BadRequestException($"Selected option with ID {request.SelectedOptionId.Value} not found for this question.");
+                }
+
+                // Double check that the option belongs to the specified question
+                if (selectedOption.QuestionId != question.QuestionId)
+                {
+                    throw new BadRequestException($"Selected option with ID {request.SelectedOptionId.Value} does not belong to question ID {request.QuestionId}.");
+                }
+            }
             var correctOption = question.Options.FirstOrDefault(o => o.IsCorrect);
-            // Một câu trả lời là đúng nếu người dùng chọn đúng đáp án VÀ có đáp án đúng tồn tại.
+            // An answer is correct if the user selected the correct option AND there is a correct option.
             bool isCorrect = (selectedOption != null && correctOption != null && correctOption.OptionId == selectedOption.OptionId);
 
-            // Kiểm tra nếu câu trả lời cho câu hỏi này đã tồn tại trong lần thử này
-            // Sử dụng khóa tổng hợp (AttemptId, QuestionId) để tìm kiếm
+            // Check if an answer for this question already exists in this attempt
+            // Use the composite key (AttemptId, QuestionId) for search
             var existingAnswer = await _dbContext.UserAnswers
                 .FirstOrDefaultAsync(ua => ua.AttemptId == request.AttemptId && ua.QuestionId == request.QuestionId);
-
             if (existingAnswer != null)
             {
-                // Nếu đã tồn tại, cập nhật câu trả lời của người dùng
+                // If it exists, update the user's answer
                 existingAnswer.SelectedOptionId = request.SelectedOptionId;
                 existingAnswer.IsCorrect = isCorrect;
             }
             else
             {
-                // Nếu chưa, tạo mới bản ghi UserAnswer
+                // If not, create a new UserAnswer record
                 var userAnswer = new UserAnswer
                 {
                     AttemptId = request.AttemptId,
@@ -149,85 +226,120 @@ namespace quiz_application.Application.Services
             }
 
             await _dbContext.SaveChangesAsync();
-
             return new AnswerFeedbackDto
             {
                 IsCorrect = isCorrect,
-                CorrectOptionId = correctOption?.OptionId, // Trả về null nếu không có đáp án đúng (lỗi dữ liệu)
+                CorrectOptionId = correctOption?.OptionId, // Return null if there is no correct option (data error)
                 CorrectOptionText = correctOption?.OptionText
             };
         }
 
-        // API 3: Kết thúc Quiz và Lấy kết quả chi tiết
+        // API 3: Finish Quiz and Get detailed results
         public async Task<QuizResultDto> FinishQuizAndGetResultsAsync(int attemptId, QuizFinishRequestDto request)
         {
+            // Validate attemptId parameter
+            if (attemptId <= 0)
+            {
+                throw new BadRequestException("AttemptId must be a positive integer.");
+            }
+
+            // Validate request object
+            if (request == null)
+            {
+                throw new BadRequestException("Request cannot be null.");
+            }
+            // Validate ClientEndTimeTicks
+            if (request.ClientEndTimeTicks <= 0)
+            {
+                throw new BadRequestException("Invalid client end time. ClientEndTimeTicks must be a positive value.");
+            }
+
+            // Convert ClientEndTimeTicks to DateTime and validate
+            DateTime clientEndTime;
+            try
+            {
+                clientEndTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientEndTimeTicks).UtcDateTime;
+
+                // Check if the end time is in the future
+                if (clientEndTime > DateTime.UtcNow.AddMinutes(5)) // Allow a small buffer for clock differences
+                {
+                    throw new BadRequestException("End time cannot be in the future.");
+                }
+            }
+            catch (Exception ex) when (!(ex is BadRequestException))
+            {
+                throw new BadRequestException($"Invalid client end time format: {ex.Message}");
+            }
             var attempt = await _dbContext.UserQuizAttempts
-                .Include(a => a.Quiz) // Nạp Quiz để lấy PassPercentage và TimeLimitSeconds
-                .Include(a => a.UserAnswers) // Nạp các câu trả lời của người dùng
-                    .ThenInclude(ua => ua.Question) // Từ UserAnswer, nạp Question
-                        .ThenInclude(q => q.Options) // Từ Question, nạp Options
+                .Include(a => a.Quiz) // Load Quiz to get PassPercentage and TimeLimitSeconds
+                .Include(a => a.UserAnswers) // Load user's answers
+                    .ThenInclude(ua => ua.Question) // From UserAnswer, load Question
+                        .ThenInclude(q => q.Options) // From Question, load Options
                 .FirstOrDefaultAsync(a => a.AttemptId == attemptId);
 
-            if (attempt == null) throw new Exception("Quiz attempt not found.");
+            if (attempt == null) throw new NotFoundException($"Quiz attempt with ID {attemptId} not found.");
 
-            // Cập nhật thời điểm kết thúc từ client
+            // Update end time from client (already validated above)
             attempt.ClientEndTime = DateTimeOffset.FromUnixTimeMilliseconds(request.ClientEndTimeTicks).UtcDateTime;
 
-            // Tính toán tổng thời gian làm bài
-            var totalTimeTaken = attempt.ClientEndTime - attempt.ClientStartTime;
+            // Validate that end time is after start time
+            if (attempt.ClientEndTime <= attempt.ClientStartTime)
+            {
+                throw new BadRequestException("End time must be after start time.");
+            }
 
-            // Đếm số câu đúng/sai
+            // Calculate total time spent on the quiz
+            var totalTimeTaken = attempt.ClientEndTime - attempt.ClientStartTime;
+            // Count correct/incorrect answers
             var correctAnswersCount = attempt.UserAnswers.Count(ua => ua.IsCorrect);
             var totalQuestionsInQuiz = await _dbContext.Questions.CountAsync(q => q.QuizId == attempt.QuizId);
             var incorrectAnswersCount = totalQuestionsInQuiz - correctAnswersCount;
 
-            // Tính toán tiêu chí ĐỖ/TRƯỢT dựa trên điểm số
+            // Calculate PASS/FAIL criteria based on score
             var passPercentage = attempt.Quiz.PassPercentage;
             var userScorePercentage = (totalQuestionsInQuiz > 0) ? ((decimal)correctAnswersCount / totalQuestionsInQuiz * 100) : 0;
             bool isScorePassed = userScorePercentage >= passPercentage;
-
-            // Tính toán tiêu chí ĐỖ/TRƯỢT dựa trên thời gian
-            bool isTimePassed = true; // Mặc định là đỗ nếu không có giới hạn thời gian
+            // Calculate PASS/FAIL criteria based on time
+            bool isTimePassed = true; // Default is pass if there's no time limit
             if (attempt.Quiz.TimeLimitSeconds.HasValue)
             {
                 isTimePassed = totalTimeTaken.TotalSeconds <= attempt.Quiz.TimeLimitSeconds.Value;
             }
-
-            // Cập nhật kết quả cuối cùng vào bản ghi Attempt
+            // Update final results in the Attempt record
             attempt.Score = correctAnswersCount;
-            attempt.IsPassed = isScorePassed && isTimePassed; // Đỗ khi ĐỦ ĐIỂM VÀ TRONG THỜI GIAN
+            attempt.IsPassed = isScorePassed && isTimePassed; // Pass when SUFFICIENT SCORE AND WITHIN TIME LIMIT
 
-            await _dbContext.SaveChangesAsync(); // Lưu kết quả cuối cùng của attempt vào DB
+            await _dbContext.SaveChangesAsync(); // Save final results of the attempt to DB            
 
-            // Chuẩn bị danh sách các câu hỏi để xem lại (ReviewQuestions)
-            // Lấy TẤT CẢ các câu hỏi của quiz, sắp xếp theo thứ tự mặc định để dễ theo dõi trong phần review
+            // Prepare list of questions for review (ReviewQuestions)
+            // Get ALL questions from the quiz, sort by default order for easier tracking in review
             var allQuestionsForReview = await _dbContext.Questions
                                                     .Where(q => q.QuizId == attempt.QuizId)
                                                     .Include(q => q.Options)
-                                                    .OrderBy(q => q.OrderInQuiz) // Luôn sắp xếp theo OrderInQuiz cho review
+                                                    .OrderBy(q => q.OrderInQuiz) // Always sort by OrderInQuiz for review
                                                     .ToListAsync();
 
             var reviewQuestions = new List<ReviewQuestionDto>();
             foreach (var question in allQuestionsForReview)
             {
-                // Lấy câu trả lời của người dùng cho câu hỏi này
+                // Get user's answer for this question
                 var userAnswer = attempt.UserAnswers.FirstOrDefault(ua => ua.QuestionId == question.QuestionId);
 
-                // Lấy thông tin về lựa chọn của người dùng (nếu có)
+                // Get information about user's selection (if any)
                 var yourAnswerOption = userAnswer != null && userAnswer.SelectedOptionId.HasValue
                     ? question.Options.FirstOrDefault(o => o.OptionId == userAnswer.SelectedOptionId.Value)
                     : null;
 
-                // Lấy thông tin về đáp án đúng
+                // Get information about the correct answer
                 var correctAnswerOption = question.Options.FirstOrDefault(o => o.IsCorrect);
 
                 reviewQuestions.Add(new ReviewQuestionDto
                 {
                     QuestionId = question.QuestionId,
                     QuestionText = question.QuestionText,
-                    YourAnswerText = yourAnswerOption?.OptionText ?? "No answer", // "No answer" nếu người dùng không trả lời hoặc chọn null
-                    CorrectAnswerText = correctAnswerOption?.OptionText, // Có thể là null nếu không có đáp án đúng
-                    WasCorrect = userAnswer?.IsCorrect ?? false // False nếu không trả lời
+                    YourAnswerText = yourAnswerOption?.OptionText ?? "No answer", // "No answer" if user didn't answer or selected null
+                    CorrectAnswerText = correctAnswerOption?.OptionText, // Can be null if there's no correct answer
+                    WasCorrect = userAnswer?.IsCorrect ?? false // False if no answer
                 });
             }
 
