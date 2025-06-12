@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   quiz-api:
     image: kuniquoc/quiz_application:latest
