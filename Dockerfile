@@ -19,20 +19,19 @@ COPY . .
 RUN dotnet build -c Release --no-restore
 
 # Run tests
-RUN dotnet test -c Release --no-build --verbosity normal
+RUN dotnet test -c Release --no-build
 
 # Publish the application
-RUN dotnet publish quiz_application.Api/quiz_application.Api.csproj -c Release -o /app/publish --no-build
+RUN dotnet publish quiz_application.Api/quiz_application.Api.csproj -c Release -o /app/publish --no-restore
 
-# Build the runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+# Build runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Set environment variables
+# Configure the container
+EXPOSE 5000
 ENV ASPNETCORE_URLS=http://+:5000
 ENV ASPNETCORE_ENVIRONMENT=Production
-
-EXPOSE 5000
 
 ENTRYPOINT ["dotnet", "quiz_application.Api.dll"]

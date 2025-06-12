@@ -6,7 +6,7 @@ using quiz_application.Api.Middleware;
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 0. Configure default ports ---
-builder.WebHost.UseUrls("http://localhost:5000");
+builder.WebHost.UseUrls("http://+:5000");
 
 // --- 1. Register Services into Dependency Injection container ---
 builder.Services.AddControllers();
@@ -26,7 +26,11 @@ var app = builder.Build();
 
 // --- 3. Configure HTTP Request Pipeline (Middleware) ---
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Quiz API v1");
+    c.RoutePrefix = "swagger";
+});
 
 // Global error handling middleware
 app.UseMiddleware<ErrorHandlingMiddleware>();
