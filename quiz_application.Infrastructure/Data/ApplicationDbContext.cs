@@ -10,7 +10,7 @@ namespace quiz_application.Infrastructure.Data
         {
         }
 
-        // Định nghĩa DbSet cho mỗi Entity để EF Core có thể theo dõi và tương tác với các bảng
+        // Define DbSet for each Entity so EF Core can track and interact with the tables
         public DbSet<Quiz> Quizzes { get; set; } = null!;
         public DbSet<Question> Questions { get; set; } = null!;
         public DbSet<Option> Options { get; set; } = null!;
@@ -21,23 +21,21 @@ namespace quiz_application.Infrastructure.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // Cấu hình khóa chính cho UserQuizAttempt
+            // Configure primary key for UserQuizAttempt
             modelBuilder.Entity<UserQuizAttempt>()
                 .HasKey(ua => ua.AttemptId);
 
-            // Cấu hình khóa chính tổng hợp cho UserAnswer
+            // Configure composite primary key for UserAnswer
             modelBuilder.Entity<UserAnswer>()
-                .HasKey(ua => new { ua.AttemptId, ua.QuestionId });
-
-            // Cấu hình mối quan hệ giữa UserAnswer và Option (SelectedOptionId)
-            // SelectedOptionId là nullable, nên mối quan hệ này là tùy chọn (IsRequired(false))
+                .HasKey(ua => new { ua.AttemptId, ua.QuestionId });           
+                
+            // Configure relationship between UserAnswer and Option (SelectedOptionId)
+            // SelectedOptionId is nullable, so this relationship is optional (IsRequired(false))
             modelBuilder.Entity<UserAnswer>()
                 .HasOne(ua => ua.SelectedOption)
                 .WithMany()
                 .HasForeignKey(ua => ua.SelectedOptionId)
-                .IsRequired(false); // Cho phép SelectedOptionId là NULL
-
-            // --- Cấu hình các mối quan hệ và ràng buộc DeleteBehavior ---
+                .IsRequired(false); // Allow SelectedOptionId to be NULL
 
             // Quiz (1) --- n --- Question (Non-Identifying)
             modelBuilder.Entity<Question>()
@@ -60,14 +58,14 @@ namespace quiz_application.Infrastructure.Data
                 .HasForeignKey(a => a.QuizId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // UserQuizAttempt (1) --- n --- UserAnswer (Identifying Relationship - vì là khóa tổng hợp)
+            // UserQuizAttempt (1) --- n --- UserAnswer (Identifying Relationship - because it's part of composite key)
             modelBuilder.Entity<UserAnswer>()
                 .HasOne(ua => ua.Attempt)
                 .WithMany(a => a.UserAnswers)
                 .HasForeignKey(ua => ua.AttemptId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Question (1) --- n --- UserAnswer (Identifying Relationship - vì là khóa tổng hợp)
+            // Question (1) --- n --- UserAnswer (Identifying Relationship - because it's part of composite key)
             modelBuilder.Entity<UserAnswer>()
                 .HasOne(ua => ua.Question)
                 .WithMany()
@@ -76,4 +74,4 @@ namespace quiz_application.Infrastructure.Data
         }
     }
 }
-// Lưu ý: Các DbSet được khởi tạo với null! để tránh cảnh báo nullability, vì chúng sẽ được khởi tạo bởi EF Core khi tạo cơ sở dữ liệu.
+// Note: DbSets are initialized with null! to avoid nullability warnings, as they will be initialized by EF Core when creating the database.
